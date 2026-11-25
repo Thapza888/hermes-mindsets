@@ -1,12 +1,15 @@
 # Hermes — Mindsets
 
-Private backup of the Hermes hunter persona and its multi-mindset router. Pull this to reinstall the mindset on a machine.
+Private backup of the Hermes hunter persona, its multi-mindset router, and the hands that back the doctrine: a toolchain, a depth module, and per-target memory. Pull this to reinstall the rig on a machine.
 
 ## What's here
 
-- `SOUL.md` — the persona. Operator (Thapza, pre-authorized), the auto mode-router, the four doctrines' always-on notes, the Sorona white-box section, and the existing hunt loop / anti-duplicate / hypothesis-log / voice sections.
+- `SOUL.md` — the persona. Operator (Thapza, pre-authorized), the auto mode-router, the attack doctrine, the Sorona white-box section, the hunt loop with the toolchain wired into its phases, anti-duplicate protocol, hypothesis log, voice.
 - `personalities.yaml` — six selectable system prompts: `hunting`, `secure-build`, `dual`, `sorona`, `attack`, `auto`. `auto` is the router; `attack` is the apex offensive mind.
-- `install.sh` — backs up, installs.
+- `toolchain/` — the executables the doctrine calls by name. Prose is not a capability; these are.
+- `depth/parser-exploitation.md` — the C/C++ parser module (the Sorona sweet spot).
+- `targets/CONVENTION.md` — the per-target memory convention.
+- `install.sh` — backs up, installs, chmods.
 
 ## The router
 
@@ -20,15 +23,37 @@ Private backup of the Hermes hunter persona and its multi-mindset router. Pull t
 | `[secure-build]` | build / design / make / redesign a site, app, API |
 | `[all]` | ambiguous / everything — every mind the task touches |
 
+## Why the toolchain exists (judgment call, on the record)
+
+Doctrine is posture; it stops a model wasting what it has. It does not enumerate, patch-diff, fuzz, or triage. Those need handlers. The toolchain is the difference between a well-disciplined hunter and one with working hands.
+
+| Script | Phase | Does |
+|---|---|---|
+| `secgit.sh <repo>` | FINGERPRINT | security-shaped commits + which of them are missing from which maintained branch |
+| `target-init.sh <project> [repo]` | FINGERPRINT | scaffold the memory dir |
+| `belief.sh <project> "<belief>" [conf]` | MODEL | persist a hypothesis with an id |
+| `fuzz.sh <harness.c> [corpus] [secs]` | STRIKE | build + run under ASAN/UBSAN against an unfuzzed parser |
+| `triage.sh <asan-bin> <input>` | STRIKE | reproduce, classify, dedupe |
+
+`fuzz.sh` prefers libFuzzer and falls back to a standalone mutation engine, because stock Xcode Command Line Tools ship no libFuzzer runtime. The fallback is ~12 exec/s — enough to prove a gap exists, not to exhaust a parser. For a real campaign:
+
+```bash
+brew install llvm
+CC=/opt/homebrew/opt/llvm/bin/clang toolchain/fuzz.sh harness.c corpus 3600
+```
+
+## Memory
+
+`~/.hermes/targets/<project>/` — `surface.md`, `beliefs.md`, `dead-paths.md`, `evidence/`. Read in that order before the first probe, write before you stop. A hunt that leaves no trace is re-run cold next week. Convention in `targets/CONVENTION.md`.
+
 ## Install
 
 ```bash
-git clone git@github.com:Thapza888/hermes-mindsets.git
-cd hermes-mindsets
+gh repo clone Thapza888/hermes-mindsets && cd ./hermes-mindsets
 bash install.sh
 ```
 
-`install.sh` writes `~/.hermes/SOUL.md` and merges the personalities into `~/.hermes/config.yaml` (backing both up first), then sets `display.personality: auto`. Restart Hermes after.
+`install.sh` backs up `SOUL.md` and `config.yaml`, writes the SOUL, merges the personalities, sets `display.personality: auto`, installs and chmods the toolchain, depth module, and memory convention. Restart Hermes after.
 
 ## Floor
 

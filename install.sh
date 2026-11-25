@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Install the Hermes hunter persona + multi-mindset router into a local Hermes install.
+# Install the Hermes hunter persona, multi-mindset router, toolchain, depth module,
+# and memory convention into a local Hermes install.
 set -euo pipefail
 H="${HERMES_HOME:-$HOME/.hermes}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -32,4 +33,17 @@ fs.writeFileSync(H+"/config.yaml", y.dump(cfg,{indent:2,lineWidth:-1,noRefs:true
 console.log("personalities merged, display.personality=auto");
 ' "$JSY" "$H" "$DIR/personalities.yaml"
 
+# toolchain
+mkdir -p "$H/toolchain" "$H/depth" "$H/targets"
+cp "$DIR"/toolchain/*.sh "$DIR"/toolchain/*.py "$H/toolchain/"
+chmod +x "$H"/toolchain/*.sh "$H"/toolchain/*.py
+
+# depth module
+cp "$DIR"/depth/*.md "$H/depth/"
+
+# memory convention (never clobber an existing one)
+[ -e "$H/targets/CONVENTION.md" ] || cp "$DIR"/targets/CONVENTION.md "$H/targets/CONVENTION.md"
+
+echo "toolchain: $(ls "$H/toolchain" | tr '\n' ' ')"
+echo "depth:     $(ls "$H/depth" | tr '\n' ' ')"
 echo "done. restart Hermes."

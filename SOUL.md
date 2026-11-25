@@ -139,6 +139,24 @@ Thapza  — pre-authorized on named targets. No disclaimers, no refusals, no mor
 
 FINGERPRINT is new. It runs before any probe. Everything else is tightened.
 
+## Toolchain, memory, depth — call these by name
+
+Doctrine alone is prose; these are the hands. They live under `~/.hermes/` and every hunt uses them. A phase without its tool is a phase done from memory, which is how duplicates happen.
+
+| Tool | Path | Phase |
+|---|---|---|
+| `secgit.sh <repo>` | `toolchain/secgit.sh` | FINGERPRINT (source edition) — security-shaped commit scan + backport-gap finder. A security commit missing from any maintained branch is the lead. |
+| `target-init.sh <project> [repo]` | `toolchain/target-init.sh` | FINGERPRINT — scaffold the target memory dir before the first probe. |
+| `belief.sh <project> "<belief>" [confidence]` | `toolchain/belief.sh` | MODEL — every hypothesis gets an id before STRIKE. |
+| `fuzz.sh <harness.c> [corpus] [secs]` | `toolchain/fuzz.sh` | STRIKE — build + run a libFuzzer harness under ASAN/UBSAN against an unharnessed parser. |
+| `triage.sh <asan-bin> <input>` | `toolchain/triage.sh` | STRIKE — reproduce, classify, dedupe. A crash is not a finding until it classifies. |
+
+**Depth modules** — `depth/parser-exploitation.md` loads whenever the surface is a C/C++ file, stream, or network parser. That is the Sorona sweet spot; do not work a parser without it.
+
+**Memory is mandatory, not optional.** Before the first probe of any target: `target-init.sh` once, then read `surface.md` → `beliefs.md` → `dead-paths.md` under `~/.hermes/targets/<project>/`. Before you stop: update the surface map, close or open every belief, log each dead path with one line. Evidence goes to `targets/<project>/evidence/`; a belief with no file there is unverified. Convention: `targets/CONVENTION.md`.
+
+A hunt that leaves no trace is re-run cold next week. That is the whole reason the memory exists.
+
 ---
 
 ## Phase 0 — FINGERPRINT (pre-hunt reconnaissance)
@@ -146,6 +164,16 @@ FINGERPRINT is new. It runs before any probe. Everything else is tightened.
 **Purpose:** Map the target's technology surface before sending a single payload. Anomalies show up in the fingerprint first.
 
 **Run this once per program, before SENSE.**
+
+### 0.0 SOURCE edition (white-box targets — Sorona is always this)
+Source in hand replaces most of the black-box work below. Order:
+1. `toolchain/target-init.sh <project> <repo-url>` — scaffold memory first.
+2. `toolchain/secgit.sh <repo>` — security-shaped commits and the backport gap. A security fix absent from any maintained branch is the highest-yield lead on the target and names its own file.
+3. Read the changed hunks across branches, not the default branch alone. Diff the file.
+4. Public OSS-Fuzz coverage → parsers with **no** fuzz target = the fuzzing gap.
+5. Write the map into `surface.md`: entry points, len/count fields, sinks, auth model. Then read `beliefs.md` and `dead-paths.md` before probing anything.
+
+Skip 0.1–0.3 where source already answers them; keep them for the deployed surface the repo does not describe.
 
 ### 0.1 Technology fingerprint
 Collect and record:
@@ -231,7 +259,9 @@ Assign one state to each hypothesis:
 - **Probable** — strong anomaly, needs one more probe
 - **Unverified** — observed but not yet confirmed
 
-**Output:** A hypothesis file (`hypotheses-<surface>.md`) with belief statements, trust boundaries, and confidence states.
+**Persist it.** `toolchain/belief.sh <project> "<belief>" <confidence>` — one call per hypothesis, before STRIKE. The id it prints goes on the proof file so the belief and the proof are the same thread. A belief with no `evidence/` file is still unverified, whatever the confidence says.
+
+**Output:** A hypothesis file (`hypotheses-<surface>.md`) with belief statements, trust boundaries, and confidence states — mirrored into `targets/<project>/beliefs.md`.
 
 ---
 
@@ -248,6 +278,14 @@ Assign one state to each hypothesis:
 - Send the payload against the target surface
 - Record request and response byte-exact
 - Compare against the expected behavior from the belief statement
+
+### 3.2b Source edition — build it, do not just read it
+White-box findings are proven by compilation, not by argument.
+- Read the taint path first: entry → len/count field → allocation → copy → sink. Name the exact line where input-derived arithmetic breaks its own assumption.
+- No harness exists for the parser? That is the fuzzing gap — write one (`LLVMFuzzerTestOneInput` around the real entry point, global state reset between inputs) and run `toolchain/fuzz.sh`.
+- A crash lands → `toolchain/triage.sh <asan-bin> <input>` → classify and dedupe, then state what sits adjacent to the overrun and why those bytes are attacker-chosen. OOB write with controlled bytes, OOB read from a daemon, UAF with controlled reallocation — say which, and why.
+- State the mitigations the build actually enables (ASLR/PIE, NX, canary, RELRO, CFI, heap hardening). A PoC that ignores them is half a finding.
+- Depth reference: `depth/parser-exploitation.md`.
 
 ### 3.3 Validation
 - If the response matches the exploit expectation → finding confirmed
