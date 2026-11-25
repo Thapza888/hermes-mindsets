@@ -30,3 +30,9 @@ EXTRA_CFLAGS="-Ibuild -Ilib"   (build/expat_config.h is hand-written; no cmake o
 
 ## state
 campaign running. No crashes in 20k+ execs at 326–470/s. Expected on this target.
+
+## campaign log
+241 s @ 567 exec/s, 136,666 execs, 4350 new units, **0 crashes**. Corpus 328 MB (needs -max_len).
+Verdict: expat is maturity-bound — a mature OSS-Fuzz target will not fall to a 4-minute campaign.
+The engine is proven; the next target should be an *unfuzzed* parser (vector B, the real gap), not
+a dense-but-fuzzed one.

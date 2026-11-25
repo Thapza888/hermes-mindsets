@@ -12,6 +12,7 @@ corpus, only the build changed.
 | libFuzzer, instrumented, `XML_ParserReset` reuse | ASAN+UBSAN | -O1 | **111** | 549 / 45 s |
 | libFuzzer, instrumented, create/free per input | ASAN+UBSAN | -O1 | **137** | 700 / 60 s |
 | libFuzzer, instrumented, create/free per input | ASAN only | -O2 | **326–470** | 564 / 20 s |
+| libFuzzer, same build, 241 s sustained campaign | ASAN only | -O2 | **567** | 4350 / 241 s |
 
 Conclusions that changed the tool:
 
@@ -23,7 +24,10 @@ Conclusions that changed the tool:
    reports no coverage growth, this is why.
 3. **`XML_ParserReset` reuse lost to create/free** (111 vs 137/s). Reset re-allocates more than it
    saves. Counter-intuitive; measure it on the target rather than assuming.
-4. **UBSAN costs ~3×.** `SANITIZE=address` alone is the speed build. Run the fast build to find
+4. **Speed climbs with a warm corpus.** The 20 s probe ran 326–470/s; the 241 s campaign on the
+   same build hit 567/s and 136,666 execs, because small high-coverage units win and the mutator
+   spends its time near them. Short probes under-report throughput by roughly a third.
+5. **UBSAN costs ~3×.** `SANITIZE=address` alone is the speed build. Run the fast build to find
    crashes, then re-run the interesting corpus under the full ASAN+UBSAN build before believing a
    result — UBSAN catches the overflows the crash-only fuzzer walks past.
 
@@ -46,6 +50,12 @@ Conclusions that changed the tool:
 - **Stock Xcode clang ships no libFuzzer runtime** and its `expat.h` is old. Point `CC` at
   homebrew llvm and `EXTRA_CFLAGS` at the project headers, or you build against the SDK's copy and
   lose the new API.
+
+## Corpus hygiene
+
+240 s at 567/s grew the corpus 328 MB — units had bloated to 71 KB because the harness accepts any
+size. Cap it on real targets: `-max_len=65536` (or the protocol's real ceiling) keeps units small,
+and small units are where the speed is. Re-minimise a fat corpus with `-merge=1` before a long run.
 
 ## Reproducing this table
 
