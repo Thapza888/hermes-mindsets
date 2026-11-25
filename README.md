@@ -53,12 +53,21 @@ SANITIZE=address,undefined OPT=-O1 toolchain/fuzz.sh harness.c corpus 3600
 
 ## Install
 
+**macOS / Linux**
+
 ```bash
 gh repo clone Thapza888/hermes-mindsets && cd ./hermes-mindsets
 bash install.sh
 ```
 
-`install.sh` backs up `SOUL.md` and `config.yaml`, writes the SOUL, merges the personalities, sets `display.personality: auto`, installs and chmods the toolchain, depth module, and memory convention. Restart Hermes after.
+**Windows** — see `WINDOWS.md` for prerequisites (Git Bash, Python, LLVM):
+
+```powershell
+gh repo clone Thapza888/hermes-mindsets; cd hermes-mindsets
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Both installers back up `SOUL.md` and `config.yaml`, write the SOUL, merge the personalities, set `display.personality: auto`, and install the toolchain, depth module and memory convention. `install.ps1` warns if bash is absent rather than failing. Restart Hermes after either.
 
 ## Floor
 

@@ -10,8 +10,11 @@ H="${1:?usage: fuzz.sh <harness.c> [corpus] [seconds]}"
 CORPUS="${2:-}"
 SECS="${3:-300}"
 SRCDIR="$(cd "$(dirname "$H")" && pwd)"
-OUT="/tmp/fuzz_$(basename "$H" .c)"
+TMPD="${TMPDIR:-/tmp}"; TMPD="${TMPD%/}"
+OUT="$TMPD/fuzz_$(basename "$H" .c)"
 HERE="$(cd "$(dirname "$0")" && pwd)"
+PY="$(command -v python3 || command -v python || true)"
+[ -n "$PY" ] || { echo "python3 not found (winget install Python.Python.3.12)"; exit 1; }
 OPT="${OPT:--O1}"                     # -O2 raises throughput ~3x at some fidelity cost
 SANITS="${SANITIZE:-address,undefined}"   # SANITIZE=address alone is ~3x faster
 XCF="${EXTRA_CFLAGS:-}"   # e.g. -I/path/to/lib for a project header
@@ -26,13 +29,13 @@ CANDIDATES+=("clang")
 
 ENGINE=""
 for c in "${CANDIDATES[@]}"; do
-  printf 'int LLVMFuzzerTestOneInput(const unsigned char*d,unsigned long n){return 0;}' > /tmp/_fzprobe.c
-  if "$c" -fsanitize=fuzzer /tmp/_fzprobe.c -o /tmp/_fzprobe 2>/dev/null; then
+  printf 'int LLVMFuzzerTestOneInput(const unsigned char*d,unsigned long n){return 0;}' > "$TMPD/_fzprobe.c"
+  if "$c" -fsanitize=fuzzer "$TMPD/_fzprobe.c" -o "$TMPD/_fzprobe" 2>/dev/null; then
     CC="$c"; ENGINE="libfuzzer"
     break
   fi
 done
-rm -f /tmp/_fzprobe.c /tmp/_fzprobe
+rm -f "$TMPD/_fzprobe.c" "$TMPD/_fzprobe"
 [ -n "$ENGINE" ] || { CC="${CC:-clang}"; ENGINE="standalone"; }
 
 SIBLINGS=()
@@ -69,5 +72,5 @@ $CC -fsanitize=address,undefined -fno-omit-frame-pointer -g "$OPT" $XCF \
 
 ITER=$(( SECS * 20 ))
 echo "running $ITER mutations (~${SECS}s)"
-python3 "$HERE/mutate.py" "$OUT" "$OUT.seeds" "$OUT.crashes" "$ITER"
+"$PY" "$HERE/mutate.py" "$OUT" "$OUT.seeds" "$OUT.crashes" "$ITER"
 echo "crashes in $OUT.crashes — triage: $HERE/triage.sh $OUT <input>"

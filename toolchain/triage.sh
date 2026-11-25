@@ -2,6 +2,14 @@
 # triage.sh <asan-binary> <input> — reproduce a crash under ASAN/UBSAN and classify it.
 # Doctrine: STRIKE. A crash is not a finding until it reproduces, classifies, and dedupes.
 set -euo pipefail
+
+# hash stdin with whatever exists (shasum is absent on Git for Windows by default)
+hashin() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 1
+  elif command -v sha1sum >/dev/null 2>&1; then sha1sum
+  else openssl sha1; fi
+}
+
 BIN="${1:?usage: triage.sh <asan-binary> <input>}"
 IN="${2:?}"
 LOG=$(ASAN_OPTIONS=abort_on_error=1:symbolize=1:detect_leaks=0 \
@@ -19,6 +27,6 @@ echo "## stack (top user frames)"
 echo "$LOG" | grep -E '^\s+#[0-9]+' | grep -v libclang_rt | head -12
 echo "## dedupe hash"
 echo "$LOG" | grep -E '^\s+#[0-9]+' | grep -v libclang_rt | head -3 \
-  | sed -E 's/0x[0-9a-f]+//g;s/==[0-9]+==//g' | tr -s ' ' | shasum -a 1 | cut -c1-12
+  | sed -E 's/0x[0-9a-f]+//g;s/==[0-9]+==//g' | tr -s ' ' | hashin | cut -c1-12
 echo "## reproducer"
 echo "  $BIN $IN"
