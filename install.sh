@@ -35,11 +35,12 @@ console.log("personalities merged, display.personality=auto");
 
 # toolchain
 mkdir -p "$H/toolchain" "$H/depth" "$H/targets"
-cp "$DIR"/toolchain/*.sh "$DIR"/toolchain/*.py "$H/toolchain/"
+cp "$DIR"/toolchain/*.sh "$DIR"/toolchain/*.py "$DIR"/toolchain/*.c "$H/toolchain/"
 chmod +x "$H"/toolchain/*.sh "$H"/toolchain/*.py
 
 # depth module
 cp "$DIR"/depth/*.md "$H/depth/"
+mkdir -p "$H/depth/examples" && cp "$DIR"/depth/examples/* "$H/depth/examples/"
 
 # memory convention (never clobber an existing one)
 [ -e "$H/targets/CONVENTION.md" ] || cp "$DIR"/targets/CONVENTION.md "$H/targets/CONVENTION.md"

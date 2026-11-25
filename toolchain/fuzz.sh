@@ -1,23 +1,48 @@
 #!/usr/bin/env bash
-# fuzz.sh <harness.c> [corpus-dir] [seconds] — build + run a fuzz campaign with ASAN/UBSAN.
-# Doctrine: SORONA vector B (fuzzing gap). Point it at a parser that has no fuzz target.
-# Prefers libFuzzer; falls back to a standalone mutation loop when the clang has no
-# libFuzzer runtime (stock Xcode Command Line Tools). bash 3.2 safe.
+# fuzz.sh <harness.c> [corpus-dir] [seconds] — build + run a coverage-guided fuzz campaign
+# with ASAN/UBSAN. Doctrine: SORONA vector B (fuzzing gap).
+#
+# Engine probe order: $CC, then homebrew llvm, then system clang. If none can link libFuzzer,
+# fall back to a standalone mutation loop (no coverage, ~10-15 exec/s).
+# bash 3.2 safe.
 set -euo pipefail
 H="${1:?usage: fuzz.sh <harness.c> [corpus] [seconds]}"
 CORPUS="${2:-}"
 SECS="${3:-300}"
 SRCDIR="$(cd "$(dirname "$H")" && pwd)"
 OUT="/tmp/fuzz_$(basename "$H" .c)"
-CC="${CC:-clang}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SAN="-fsanitize=address,undefined -fno-omit-frame-pointer -g -O1"
+OPT="${OPT:--O1}"                     # -O2 raises throughput ~3x at some fidelity cost
+SANITS="${SANITIZE:-address,undefined}"   # SANITIZE=address alone is ~3x faster
+XCF="${EXTRA_CFLAGS:-}"   # e.g. -I/path/to/lib for a project header
+
+# ── compiler selection ──────────────────────────────────────────────────────
+CANDIDATES=()
+[ -n "${CC:-}" ] && CANDIDATES+=("$CC")
+for c in /opt/homebrew/opt/llvm/bin/clang /usr/local/opt/llvm/bin/clang; do
+  [ -x "$c" ] && CANDIDATES+=("$c")
+done
+CANDIDATES+=("clang")
+
+ENGINE=""
+for c in "${CANDIDATES[@]}"; do
+  printf 'int LLVMFuzzerTestOneInput(const unsigned char*d,unsigned long n){return 0;}' > /tmp/_fzprobe.c
+  if "$c" -fsanitize=fuzzer /tmp/_fzprobe.c -o /tmp/_fzprobe 2>/dev/null; then
+    CC="$c"; ENGINE="libfuzzer"
+    break
+  fi
+done
+rm -f /tmp/_fzprobe.c /tmp/_fzprobe
+[ -n "$ENGINE" ] || { CC="${CC:-clang}"; ENGINE="standalone"; }
 
 SIBLINGS=()
 while IFS= read -r f; do
   case "$f" in */"$(basename "$H")") continue ;; esac
   SIBLINGS+=("$f")
 done < <(find "$SRCDIR" -maxdepth 2 -type f \( -name '*.c' -o -name '*.cc' -o -name '*.cpp' \) 2>/dev/null || true)
+
+# SRCS="a.c b.c" overrides the sibling scan when the harness sits outside the source tree
+[ -n "${SRCS:-}" ] && SIBLINGS=($SRCS)
 
 mkdir -p "$OUT.seeds"
 if [ -n "$CORPUS" ] && [ -d "$CORPUS" ]; then cp -n "$CORPUS"/* "$OUT.seeds/" 2>/dev/null || true; fi
@@ -28,43 +53,21 @@ if [ -n "$CORPUS" ] && [ -d "$CORPUS" ]; then cp -n "$CORPUS"/* "$OUT.seeds/" 2>
   printf 'AAAAAAAAAAAAAAAA' > "$OUT.seeds/a16"
 }
 
-echo "## build (libFuzzer)"
-if $CC -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -g -O1 \
-      -I"$SRCDIR" "$H" ${SIBLINGS[@]+"${SIBLINGS[@]}"} -o "$OUT" 2>"$OUT.build.log"; then
-  echo "libFuzzer engine"
-  "$OUT" -max_total_time="$SECS" -print_final_stats=1 "$OUT.seeds"
-  exit $?
+echo "## build ($ENGINE, $CC)"
+if [ "$ENGINE" = "libfuzzer" ]; then
+  $CC -fsanitize=fuzzer,"$SANITS" -fno-omit-frame-pointer -g $OPT $XCF -I"$SRCDIR" "$H" ${SIBLINGS[@]+"${SIBLINGS[@]}"} -o "$OUT" 2>&1 | tail -4
+  [ -x "$OUT" ] || { echo "build failed"; exit 1; }
+  mkdir -p "$OUT.crashes"
+  exec "$OUT" -max_total_time="$SECS" -print_final_stats=1 \
+      -artifact_prefix="$OUT.crashes/" "$OUT.seeds"
 fi
-tail -3 "$OUT.build.log"
-echo "## no libFuzzer runtime — standalone engine (ASAN/UBSAN only)"
 
-SHIM="/tmp/fuzz_shim_$$.c"
-cat > "$SHIM" <<'EOF'
-#include <stdio.h>
-#include <stdlib.h>
-int LLVMFuzzerTestOneInput(const unsigned char*, size_t);
-int main(int argc, char **argv) {
-    if (argc < 2) return 2;
-    FILE *f = fopen(argv[1], "rb");
-    if (!f) return 2;
-    fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
-    if (n < 0) { fclose(f); return 2; }
-    unsigned char *b = malloc((size_t)n + 1);
-    size_t got = fread(b, 1, (size_t)n, f);
-    fclose(f);
-    LLVMFuzzerTestOneInput(b, got);
-    free(b);
-    return 0;
-}
-EOF
-
-$CC $SAN -I"$SRCDIR" "$SHIM" "$H" ${SIBLINGS[@]+"${SIBLINGS[@]}"} -o "$OUT" 2>&1 | tail -6
-rm -f "$SHIM"
+echo "no libFuzzer-capable compiler — standalone engine (brew install llvm to fix)"
+$CC -fsanitize=address,undefined -fno-omit-frame-pointer -g "$OPT" $XCF \
+    -I"$SRCDIR" "$H" ${SIBLINGS[@]+"${SIBLINGS[@]}"} -o "$OUT" "$HERE/fuzz_shim.c" 2>&1 | tail -6
 [ -x "$OUT" ] || { echo "build failed"; exit 1; }
 
 ITER=$(( SECS * 20 ))
 echo "running $ITER mutations (~${SECS}s)"
 python3 "$HERE/mutate.py" "$OUT" "$OUT.seeds" "$OUT.crashes" "$ITER"
 echo "crashes in $OUT.crashes — triage: $HERE/triage.sh $OUT <input>"
-echo "note: standalone engine is ~10-15 exec/s. For a real campaign install llvm:"
-echo "      brew install llvm   then   CC=/opt/homebrew/opt/llvm/bin/clang $0 $H \"$CORPUS\" $SECS"

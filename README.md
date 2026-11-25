@@ -8,6 +8,7 @@ Private backup of the Hermes hunter persona, its multi-mindset router, and the h
 - `personalities.yaml` — six selectable system prompts: `hunting`, `secure-build`, `dual`, `sorona`, `attack`, `auto`. `auto` is the router; `attack` is the apex offensive mind.
 - `toolchain/` — the executables the doctrine calls by name. Prose is not a capability; these are.
 - `depth/parser-exploitation.md` — the C/C++ parser module (the Sorona sweet spot).
+- `depth/examples/` — a worked campaign against libexpat: harness, config, surface map, dead paths, and what it found.
 - `targets/CONVENTION.md` — the per-target memory convention.
 - `install.sh` — backs up, installs, chmods.
 
@@ -35,11 +36,15 @@ Doctrine is posture; it stops a model wasting what it has. It does not enumerate
 | `fuzz.sh <harness.c> [corpus] [secs]` | STRIKE | build + run under ASAN/UBSAN against an unfuzzed parser |
 | `triage.sh <asan-bin> <input>` | STRIKE | reproduce, classify, dedupe |
 
+Measured, not assumed: **12 exec/s** on the standalone fallback vs **326–470 exec/s** with the real engine — same harness. Numbers, build gotchas and the blind-fuzzer trap are in `toolchain/PROFILING.md`. Knobs: `CC`, `SRCS`, `EXTRA_CFLAGS`, `SANITIZE` (address alone = fast pass), `OPT` (-O2 = fast pass).
+
 `fuzz.sh` prefers libFuzzer and falls back to a standalone mutation engine, because stock Xcode Command Line Tools ship no libFuzzer runtime. The fallback is ~12 exec/s — enough to prove a gap exists, not to exhaust a parser. For a real campaign:
 
 ```bash
 brew install llvm
-CC=/opt/homebrew/opt/llvm/bin/clang toolchain/fuzz.sh harness.c corpus 3600
+CC=/opt/homebrew/opt/llvm/bin/clang SANITIZE=address OPT=-O2 toolchain/fuzz.sh harness.c corpus 600
+# then the fidelity pass on the same corpus
+SANITIZE=address,undefined OPT=-O1 toolchain/fuzz.sh harness.c corpus 3600
 ```
 
 ## Memory
